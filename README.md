@@ -1,5 +1,13 @@
 # dockerc - compile docker images to standalone portable binaries
 
+## Usage
+
+Example with the `oven/bun` docker image. This works for any image you can think of!
+
+```
+$ dockerc --image docker://oven/bun --output bun
+```
+
 ## Features
 
 - [X] Compiler docker images into portable binaries
