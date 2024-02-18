@@ -3,6 +3,7 @@
 ## Features
 
 - [X] Compiler docker images into portable binaries
+- [X] Rootless containers
 - [ ] MacOS support (using qemu)
 - [X] x86_64 support
 - [ ] arm64 support
