@@ -1,0 +1,6 @@
+src/tools/skopeo filter=lfs diff=lfs merge=lfs -text
+src/tools/squashfuse filter=lfs diff=lfs merge=lfs -text
+src/tools/umoci.amd64 filter=lfs diff=lfs merge=lfs -text
+src/tools/crun filter=lfs diff=lfs merge=lfs -text
+src/tools/fuse-overlayfs filter=lfs diff=lfs merge=lfs -text
+src/tools/mksquashfs filter=lfs diff=lfs merge=lfs -text
