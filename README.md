@@ -9,10 +9,12 @@
 - [X] Supports arguments
 - [ ] Support `-p`
 - [ ] Support `-v`
-- [ ] Support other arguments...
+- [ ] Support other [arguments][0]...
 
 
 ### Why zig?
 
 * Small binary size
 * Full static linking
+
+[0]: https://docs.docker.com/engine/reference/commandline/container_run/
