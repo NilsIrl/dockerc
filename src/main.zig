@@ -117,17 +117,22 @@ pub fn main() !void {
     });
     defer allocator.free(overlayfs_options);
 
-    const tmpDir = try std.fs.openDirAbsolute(temp_dir_path, .{});
-    try tmpDir.makeDir("upper");
-    try tmpDir.makeDir("work");
-    try tmpDir.makeDir("mount");
+    {
+        // Indent so that handles to files in mounted dir are closed by the end
+        // to avoid umounting from being blocked.
+        var tmpDir = try std.fs.openDirAbsolute(temp_dir_path, .{});
+        defer tmpDir.close();
+        try tmpDir.makeDir("upper");
+        try tmpDir.makeDir("work");
+        try tmpDir.makeDir("mount");
 
-    var overlayfsProcess = std.ChildProcess.init(&[_][]const u8{ overlayfs_path, "-o", overlayfs_options, mount_dir_path }, allocator);
-    _ = try overlayfsProcess.spawnAndWait();
+        var overlayfsProcess = std.ChildProcess.init(&[_][]const u8{ overlayfs_path, "-o", overlayfs_options, mount_dir_path }, allocator);
+        _ = try overlayfsProcess.spawnAndWait();
 
-    const file = try tmpDir.openFile("mount/config.json", .{ .mode = .read_write });
-    defer file.close();
-    try processArgs(file, allocator);
+        const file = try tmpDir.openFile("mount/config.json", .{ .mode = .read_write });
+        defer file.close();
+        try processArgs(file, allocator);
+    }
 
     var crunProcess = std.ChildProcess.init(&[_][]const u8{ crun_path, "run", "-b", mount_dir_path, "crun_docker_c_id" }, gpa.allocator());
     _ = try crunProcess.spawnAndWait();
