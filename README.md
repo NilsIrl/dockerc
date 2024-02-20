@@ -2,6 +2,8 @@
 
 ## Usage
 
+Install dockerc from the [latest release](https://github.com/NilsIrl/dockerc/releases).
+
 Example with the `oven/bun` docker image. This works for any image you can think of!
 
 ```
