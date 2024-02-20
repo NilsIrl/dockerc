@@ -4,15 +4,15 @@
 
 Install dockerc from the [latest release](https://github.com/NilsIrl/dockerc/releases).
 
-Example with the `oven/bun` docker image. This works for any image you can think of!
 
 ```
+# Image from docker hub
 $ dockerc --image docker://oven/bun --output bun
+# Image in local docker daemon storage
+$ zig-out/bin/dockerc --image docker-daemon:mysherlock-image:latest --output sherlock_bin
 ```
 
-To specify an image in the docker daemon internal storage use
-**docker-archive**:_path_[:_docker-reference_]. Skopeo is used to loading
-images, for other locations refer to [its documentation][1].
+Skopeo is used to loading images, for other locations refer to [its documentation][1].
 
 ## Features
 
