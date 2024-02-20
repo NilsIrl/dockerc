@@ -26,11 +26,5 @@ Skopeo is used to loading images, for other locations refer to [its documentatio
 - [ ] Support `-v`
 - [ ] Support other [arguments][0]...
 
-
-### Why zig?
-
-* Small binary size
-* Full static linking
-
 [0]: https://docs.docker.com/engine/reference/commandline/container_run/
 [1]: https://github.com/containers/skopeo/blob/main/docs/skopeo.1.md#image-names
