@@ -12,7 +12,7 @@ $ dockerc --image docker://oven/bun --output bun
 $ zig-out/bin/dockerc --image docker-daemon:mysherlock-image:latest --output sherlock_bin
 ```
 
-Skopeo is used to loading images, for other locations refer to [its documentation][1].
+Skopeo is used for loading images, for other locations refer to [its documentation][1].
 
 ## Features
 
