@@ -118,8 +118,12 @@ fn processArgs(file: std.fs.File, parentAllocator: std.mem.Allocator) !void {
             try mount.put("options", std.json.Value{ .array = options });
 
             const separator = std.mem.indexOfScalar(u8, volume_syntax, ':') orelse @panic("no volume destination specified");
-            
-            try mount.put("source", std.json.Value{ .string = volume_syntax[0..separator] });
+
+            if (volume_syntax[0] == '/') {
+                try mount.put("source", std.json.Value{ .string = volume_syntax[0..separator] });
+            } else {
+                try mount.put("source", std.json.Value{ .string = try std.fs.cwd().realpathAlloc(allocator, volume_syntax[0..separator])} );
+            }
             try mount.put("destination", std.json.Value{ .string = volume_syntax[separator + 1..] });
 
             try mounts_json.append(std.json.Value{ .object = mount });
@@ -174,7 +178,7 @@ pub fn main() !void {
     var mountProcess = std.ChildProcess.init(&args_buf, allocator);
     _ = try mountProcess.spawnAndWait();
 
-    const overlayfs_options = try std.fmt.allocPrint(allocator, "lowerdir={s},upperdir={s}/upper,workdir={s}/upper", .{
+    const overlayfs_options = try std.fmt.allocPrint(allocator, "lowerdir={s},upperdir={s}/upper,workdir={s}/work", .{
         filesystem_bundle_dir_null,
         temp_dir_path,
         temp_dir_path,
