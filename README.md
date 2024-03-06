@@ -1,5 +1,10 @@
 # dockerc - compile docker images to standalone portable binaries
 
+No more [![Tweet](./assets/post.png)][4]
+
+No more `docker run`, no more `pip install`, no more `npm i`, just give your users executables they can run!
+
+
 ## Usage
 
 Install dockerc from the [latest release](https://github.com/NilsIrl/dockerc/releases).
@@ -41,3 +46,4 @@ $ zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-linux-musl
 [1]: https://github.com/containers/skopeo/blob/main/docs/skopeo.1.md#image-names
 [2]: https://docs.docker.com/reference/cli/docker/container/run/#env
 [3]: https://docs.docker.com/reference/cli/docker/container/run/#volume
+[4]: https://twitter.com/liz_love_lace/status/1759276265906061616
