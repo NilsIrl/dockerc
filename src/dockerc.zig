@@ -57,7 +57,7 @@ pub fn main() !void {
     defer res.deinit();
 
     if (res.args.help != 0) {
-        debug.print("help message\n", .{});
+        try clap.help(io.getStdErr().writer(), clap.Help, &params, .{});
         return;
     }
 
@@ -73,6 +73,7 @@ pub fn main() !void {
     }
 
     if (missing_args) {
+        debug.print("--help for usage\n", .{});
         return;
     }
 
