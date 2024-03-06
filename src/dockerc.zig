@@ -13,6 +13,9 @@ const io = std.io;
 const skopeo_content = @embedFile("tools/skopeo");
 const mksquashfs_content = @embedFile("tools/mksquashfs");
 const umoci_content = @embedFile("tools/umoci.amd64");
+
+const policy_content = @embedFile("tools/policy.json");
+
 const runtime_content = @embedFile("runtime");
 
 const runtime_content_len_u64 = data: {
@@ -36,6 +39,9 @@ pub fn main() !void {
 
     const mksquashfs_path = try extract_file(temp_dir_path, "mksquashfs", mksquashfs_content, allocator);
     defer allocator.free(mksquashfs_path);
+
+    const policy_path = try extract_file(temp_dir_path, "policy.json", policy_content, allocator);
+    defer allocator.free(policy_path);
 
     const params = comptime clap.parseParamsComptime(
         \\-h, --help               Display this help and exit.
@@ -84,7 +90,7 @@ pub fn main() !void {
     const destination_arg = try std.fmt.allocPrint(allocator, "oci:{s}/image:latest", .{temp_dir_path});
     defer allocator.free(destination_arg);
 
-    var skopeoProcess = std.ChildProcess.init(&[_][]const u8{ skopeo_path, "copy", image, destination_arg }, gpa.allocator());
+    var skopeoProcess = std.ChildProcess.init(&[_][]const u8{ skopeo_path, "copy", "--policy", policy_path, image, destination_arg }, gpa.allocator());
     _ = try skopeoProcess.spawnAndWait();
 
     const umoci_image_layout_path = try std.fmt.allocPrint(allocator, "{s}/image:latest", .{temp_dir_path});
