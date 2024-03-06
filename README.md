@@ -22,9 +22,10 @@ Skopeo is used for loading images, for other locations refer to [its documentati
 - [X] x86_64 support
 - [ ] arm64 support
 - [X] Supports arguments
-- [ ] Support `-p`
+- [X] [Supports environment variables specifying environment variables][2]
 - [ ] Support `-v`
 - [ ] Support other [arguments][0]...
 
 [0]: https://docs.docker.com/engine/reference/commandline/container_run/
 [1]: https://github.com/containers/skopeo/blob/main/docs/skopeo.1.md#image-names
+[2]: https://docs.docker.com/reference/cli/docker/container/run/#env

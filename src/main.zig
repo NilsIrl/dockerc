@@ -6,8 +6,9 @@ const mkdtemp = common.mkdtemp;
 const extract_file = common.extract_file;
 
 const squashfuse_content = @embedFile("tools/squashfuse");
-const crun_content = @embedFile("tools/crun");
 const overlayfs_content = @embedFile("tools/fuse-overlayfs");
+
+const crun_content = @embedFile("tools/crun");
 
 fn getOffset(path: []const u8) !u64 {
     var file = try std.fs.cwd().openFile(path, .{});
@@ -21,40 +22,74 @@ fn getOffset(path: []const u8) !u64 {
 
 const eql = std.mem.eql;
 
-fn processArgs(file: std.fs.File, allocator: std.mem.Allocator) !void {
-    // const file = try std.fs.openFileAbsolute(path, .{ .mode = .read_write });
+// inspired from std.posix.getenv
+fn getEnvFull(key: []const u8) ?[:0]const u8 {
+    var ptr = std.c.environ;
+    while (ptr[0]) |line| : (ptr += 1) {
+        var line_i: usize = 0;
+        while (line[line_i] != 0 and line[line_i] != '=') : (line_i += 1) {}
+        const this_key = line[0..line_i];
 
+        if (!std.mem.eql(u8, this_key, key)) continue;
+
+        return std.mem.sliceTo(line, 0);
+    }
+    return null;
+}
+
+fn processArgs(file: std.fs.File, allocator: std.mem.Allocator) !void {
     var jsonReader = std.json.reader(allocator, file.reader());
 
     // TODO: having to specify max_value_len seems like a bug
     var root_value = try std.json.Value.jsonParse(allocator, &jsonReader, .{ .max_value_len = 99999999 });
 
-    const argVal = args: {
-        switch (root_value) {
-            .object => |*object| {
-                const processVal = object.getPtr("process") orelse @panic("no process key");
-                switch (processVal.*) {
-                    .object => |*process| {
-                        const argsVal = process.getPtr("args") orelse @panic("no args key");
-                        switch (argsVal.*) {
-                            .array => |*argsArr| {
-                                break :args argsArr;
+    var args_json: *std.ArrayList(std.json.Value) = undefined;
+    var env_json: *std.ArrayList(std.json.Value) = undefined;
+
+    switch (root_value) {
+        .object => |*object| {
+            const processVal = object.getPtr("process") orelse @panic("no process key");
+            switch (processVal.*) {
+                .object => |*process| {
+                    const argsVal = process.getPtr("args") orelse @panic("no args key");
+                    switch (argsVal.*) {
+                        .array => |*argsArr| {
+                            args_json = argsArr;
+                        },
+                        else => return error.InvalidJSON,
+                    }
+
+                    if (process.getPtr("env")) |envVal| {
+                        switch (envVal.*) {
+                            .array => |*envArr| {
+                                env_json = envArr;
                             },
                             else => return error.InvalidJSON,
                         }
-                    },
-                    else => return error.InvalidJSON,
-                }
-            },
-            else => return error.InvalidJSON,
-        }
-    };
+                    } else {
+                        var array = std.json.Array.init(allocator);
+                        env_json = &array;
+                        try process.put("env", std.json.Value{ .array = array });
+                    }
+                },
+                else => return error.InvalidJSON,
+            }
+        },
+        else => return error.InvalidJSON,
+    }
 
     var args = std.process.args();
     _ = args.next() orelse @panic("there should be an executable");
 
     while (args.next()) |arg| {
-        if (eql(u8, arg, "-p")) {
+        if (eql(u8, arg, "-e") or eql(u8, arg, "--env")) {
+            const environment_variable = args.next() orelse @panic("expected environment variable");
+            if (std.mem.indexOfScalar(u8, environment_variable, '=')) |_| {
+                try env_json.append(std.json.Value{ .string = environment_variable });
+            } else {
+                try env_json.append(std.json.Value{ .string = getEnvFull(environment_variable) orelse @panic("environment variable does not exist") });
+            }
+        } else if (eql(u8, arg, "-p")) {
             _ = args.next();
             @panic("not implemented");
         } else if (eql(u8, arg, "-v")) {
@@ -62,10 +97,10 @@ fn processArgs(file: std.fs.File, allocator: std.mem.Allocator) !void {
             @panic("not implemented");
         } else if (eql(u8, arg, "--")) {
             while (args.next()) |arg_inner| {
-                try argVal.append(std.json.Value{ .string = arg_inner });
+                try args_json.append(std.json.Value{ .string = arg_inner });
             }
         } else {
-            try argVal.append(std.json.Value{ .string = arg });
+            try args_json.append(std.json.Value{ .string = arg });
         }
     }
 
