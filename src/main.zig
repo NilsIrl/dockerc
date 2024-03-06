@@ -202,7 +202,7 @@ pub fn main() !void {
         try processArgs(file, allocator);
     }
 
-    var crunProcess = std.ChildProcess.init(&[_][]const u8{ crun_path, "run", "-b", mount_dir_path, "crun_docker_c_id" }, allocator);
+    var crunProcess = std.ChildProcess.init(&[_][]const u8{ crun_path, "run", "-b", mount_dir_path, temp_dir_path[13..] }, allocator);
     _ = try crunProcess.spawnAndWait();
 
     var umountOverlayProcess = std.ChildProcess.init(&[_][]const u8{ "umount", mount_dir_path }, allocator);
