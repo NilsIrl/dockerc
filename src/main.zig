@@ -37,7 +37,11 @@ fn getEnvFull(key: []const u8) ?[:0]const u8 {
     return null;
 }
 
-fn processArgs(file: std.fs.File, allocator: std.mem.Allocator) !void {
+fn processArgs(file: std.fs.File, parentAllocator: std.mem.Allocator) !void {
+    var arena = std.heap.ArenaAllocator.init(parentAllocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
     var jsonReader = std.json.reader(allocator, file.reader());
 
     // TODO: having to specify max_value_len seems like a bug
@@ -45,6 +49,7 @@ fn processArgs(file: std.fs.File, allocator: std.mem.Allocator) !void {
 
     var args_json: *std.ArrayList(std.json.Value) = undefined;
     var env_json: *std.ArrayList(std.json.Value) = undefined;
+    var mounts_json: *std.ArrayList(std.json.Value) = undefined;
 
     switch (root_value) {
         .object => |*object| {
@@ -74,6 +79,19 @@ fn processArgs(file: std.fs.File, allocator: std.mem.Allocator) !void {
                 },
                 else => return error.InvalidJSON,
             }
+
+            if (object.getPtr("mounts")) |mountsVal| {
+                switch (mountsVal.*) {
+                    .array => |*mountsArr| {
+                        mounts_json = mountsArr;
+                    },
+                    else => return error.InvalidJSON,
+                }
+            } else {
+                var array = std.json.Array.init(allocator);
+                mounts_json = &array;
+                try object.put("mounts", std.json.Value{ .array = array });
+            }
         },
         else => return error.InvalidJSON,
     }
@@ -89,12 +107,22 @@ fn processArgs(file: std.fs.File, allocator: std.mem.Allocator) !void {
             } else {
                 try env_json.append(std.json.Value{ .string = getEnvFull(environment_variable) orelse @panic("environment variable does not exist") });
             }
-        } else if (eql(u8, arg, "-p")) {
-            _ = args.next();
-            @panic("not implemented");
-        } else if (eql(u8, arg, "-v")) {
-            _ = args.next();
-            @panic("not implemented");
+        } else if (eql(u8, arg, "-v") or eql(u8, arg, "--volume")) {
+            const volume_syntax = args.next() orelse @panic("expected volume syntax");
+
+            var mount = std.json.ObjectMap.init(allocator);
+
+            var options = std.json.Array.init(allocator);
+            try options.append(std.json.Value { .string = "rw" });
+            try options.append(std.json.Value { .string = "rbind" });
+            try mount.put("options", std.json.Value{ .array = options });
+
+            const separator = std.mem.indexOfScalar(u8, volume_syntax, ':') orelse @panic("no volume destination specified");
+            
+            try mount.put("source", std.json.Value{ .string = volume_syntax[0..separator] });
+            try mount.put("destination", std.json.Value{ .string = volume_syntax[separator + 1..] });
+
+            try mounts_json.append(std.json.Value{ .object = mount });
         } else if (eql(u8, arg, "--")) {
             while (args.next()) |arg_inner| {
                 try args_json.append(std.json.Value{ .string = arg_inner });
@@ -113,6 +141,7 @@ fn processArgs(file: std.fs.File, allocator: std.mem.Allocator) !void {
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     // defer _ = gpa.deinit();
     var args = std.process.args();
@@ -142,7 +171,7 @@ pub fn main() !void {
 
     const args_buf = [_][]const u8{ squashfuse_path, "-o", offsetArg, executable_path, filesystem_bundle_dir_null };
 
-    var mountProcess = std.ChildProcess.init(&args_buf, gpa.allocator());
+    var mountProcess = std.ChildProcess.init(&args_buf, allocator);
     _ = try mountProcess.spawnAndWait();
 
     const overlayfs_options = try std.fmt.allocPrint(allocator, "lowerdir={s},upperdir={s}/upper,workdir={s}/upper", .{
@@ -169,13 +198,13 @@ pub fn main() !void {
         try processArgs(file, allocator);
     }
 
-    var crunProcess = std.ChildProcess.init(&[_][]const u8{ crun_path, "run", "-b", mount_dir_path, "crun_docker_c_id" }, gpa.allocator());
+    var crunProcess = std.ChildProcess.init(&[_][]const u8{ crun_path, "run", "-b", mount_dir_path, "crun_docker_c_id" }, allocator);
     _ = try crunProcess.spawnAndWait();
 
-    var umountOverlayProcess = std.ChildProcess.init(&[_][]const u8{ "umount", mount_dir_path }, gpa.allocator());
+    var umountOverlayProcess = std.ChildProcess.init(&[_][]const u8{ "umount", mount_dir_path }, allocator);
     _ = try umountOverlayProcess.spawnAndWait();
 
-    var umountProcess = std.ChildProcess.init(&[_][]const u8{ "umount", filesystem_bundle_dir_null }, gpa.allocator());
+    var umountProcess = std.ChildProcess.init(&[_][]const u8{ "umount", filesystem_bundle_dir_null }, allocator);
     _ = try umountProcess.spawnAndWait();
 
     // TODO: clean up /tmp
