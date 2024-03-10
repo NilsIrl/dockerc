@@ -18,7 +18,10 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    // const clap = b.addModule("clap", .{ .root_source_file = .{ .path = "lib/zig-clap/clap.zig" } });
+    const clap = b.dependency("clap", .{
+        .optimize = optimize,
+        .target = target,
+    });
 
     const runtime = b.addExecutable(.{
         .name = "runtime",
@@ -39,6 +42,7 @@ pub fn build(b: *std.Build) void {
     });
 
     dockerc.root_module.addAnonymousImport("runtime", .{ .root_source_file = runtime.getEmittedBin() });
+    dockerc.root_module.addImport("clap", clap.module("clap"));
 
     b.installArtifact(dockerc);
 

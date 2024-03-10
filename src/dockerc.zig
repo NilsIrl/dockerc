@@ -1,6 +1,5 @@
 const std = @import("std");
-// const clap = @import("../lib/zip-clap/clap.zig");
-const clap = @import("zig-clap/clap.zig");
+const clap = @import("clap");
 const common = @import("common.zig");
 
 const mkdtemp = common.mkdtemp;
