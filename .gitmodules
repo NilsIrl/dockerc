@@ -1,3 +1,6 @@
 [submodule "umoci"]
 	path = umoci
 	url = https://github.com/opencontainers/umoci.git
+[submodule "skopeo"]
+	path = skopeo
+	url = https://github.com/containers/skopeo.git

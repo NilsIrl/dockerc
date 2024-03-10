@@ -11,7 +11,6 @@ pub fn build(b: *std.Build) void {
     // means any target is allowed, and the default is native. Other options
     // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
-    // target.result.abi = .musl;
 
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
@@ -33,7 +32,11 @@ pub fn build(b: *std.Build) void {
         // .code_model = .medium,
     });
 
-    const cpu_arch = target.query.cpu_arch orelse target.result.cpu.arch;
+    const go_cpu_arch = switch (target.query.cpu_arch orelse target.result.cpu.arch) {
+        .x86_64 => "amd64",
+        .aarch64 => "arm64",
+        else => @panic("unimplemented"),
+    };
     const umoci = b.addSystemCommand(&[_][]const u8{
         "go",
         "build",
@@ -51,11 +54,27 @@ pub fn build(b: *std.Build) void {
         "0",
     );
 
-    umoci.setEnvironmentVariable("GOARCH", switch (cpu_arch) {
-        .x86_64 => "amd64",
-        .aarch64 => "arm64",
-        else => @panic("unimplemented"),
+    umoci.setEnvironmentVariable("GOARCH", go_cpu_arch);
+
+    const skopeo = b.addSystemCommand(&[_][]const u8{
+        "go",
+        "build",
+        "-gcflags",
+        "",
+        "-tags",
+        "containers_image_openpgp",
+        "-o",
     });
+    skopeo.setCwd(std.Build.LazyPath.relative("skopeo"));
+    const skopeo_output = skopeo.addOutputFileArg("skopeo");
+    skopeo.addArg("./cmd/skopeo");
+    
+    skopeo.setEnvironmentVariable(
+        "CGO_ENABLED",
+        "0",
+    );
+    skopeo.setEnvironmentVariable("GOARCH", go_cpu_arch);
+    skopeo.setEnvironmentVariable("DISABLE_DOCS", "1");
 
     const dockerc = b.addExecutable(.{
         .name = "dockerc",
@@ -69,9 +88,14 @@ pub fn build(b: *std.Build) void {
         "runtime",
         .{ .root_source_file = runtime.getEmittedBin() },
     );
+
     dockerc.root_module.addAnonymousImport(
         "umoci",
         .{ .root_source_file = umoci_output },
+    );
+    dockerc.root_module.addAnonymousImport(
+        "skopeo",
+        .{ .root_source_file = skopeo_output },
     );
 
     dockerc.root_module.addImport("clap", clap.module("clap"));
