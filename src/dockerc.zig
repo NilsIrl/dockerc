@@ -11,7 +11,7 @@ const io = std.io;
 
 const skopeo_content = @embedFile("tools/skopeo");
 const mksquashfs_content = @embedFile("tools/mksquashfs");
-const umoci_content = @embedFile("tools/umoci.amd64");
+const umoci_content = @embedFile("umoci");
 
 const policy_content = @embedFile("tools/policy.json");
 

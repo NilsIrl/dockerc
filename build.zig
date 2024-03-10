@@ -33,6 +33,30 @@ pub fn build(b: *std.Build) void {
         // .code_model = .medium,
     });
 
+    const cpu_arch = target.query.cpu_arch orelse target.result.cpu.arch;
+    const umoci = b.addSystemCommand(&[_][]const u8{
+        "go",
+        "build",
+        "-tags",
+        "",
+        "-ldflags",
+        "-s -extldflags '-static'",
+        "-o",
+    });
+    umoci.setCwd(std.Build.LazyPath.relative("umoci"));
+    const umoci_output = umoci.addOutputFileArg("umoci");
+    umoci.addArg("github.com/opencontainers/umoci/cmd/umoci");
+    umoci.setEnvironmentVariable(
+        "CGO_ENABLED",
+        "0",
+    );
+
+    umoci.setEnvironmentVariable("GOARCH", switch (cpu_arch) {
+        .x86_64 => "amd64",
+        .aarch64 => "arm64",
+        else => @panic("unimplemented"),
+    });
+
     const dockerc = b.addExecutable(.{
         .name = "dockerc",
         .root_source_file = .{ .path = "src/dockerc.zig" },
@@ -41,7 +65,15 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
-    dockerc.root_module.addAnonymousImport("runtime", .{ .root_source_file = runtime.getEmittedBin() });
+    dockerc.root_module.addAnonymousImport(
+        "runtime",
+        .{ .root_source_file = runtime.getEmittedBin() },
+    );
+    dockerc.root_module.addAnonymousImport(
+        "umoci",
+        .{ .root_source_file = umoci_output },
+    );
+
     dockerc.root_module.addImport("clap", clap.module("clap"));
 
     b.installArtifact(dockerc);
