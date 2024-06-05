@@ -8,7 +8,9 @@ const extract_file = common.extract_file;
 const squashfuse_content = @embedFile("tools/squashfuse");
 const overlayfs_content = @embedFile("tools/fuse-overlayfs");
 
-const crun_content = @embedFile("tools/crun");
+const c = @cImport({
+    @cInclude("libcrun/container.h");
+});
 
 fn getOffset(path: []const u8) !u64 {
     var file = try std.fs.cwd().openFile(path, .{});
@@ -156,9 +158,6 @@ pub fn main() !void {
     const squashfuse_path = try extract_file(temp_dir_path, "squashfuse", squashfuse_content, allocator);
     defer allocator.free(squashfuse_path);
 
-    const crun_path = try extract_file(temp_dir_path, "crun", crun_content, allocator);
-    defer allocator.free(crun_path);
-
     const overlayfs_path = try extract_file(temp_dir_path, "fuse-overlayfs", overlayfs_content, allocator);
     defer allocator.free(overlayfs_path);
 
@@ -202,8 +201,16 @@ pub fn main() !void {
         try processArgs(file, allocator);
     }
 
-    var crunProcess = std.ChildProcess.init(&[_][]const u8{ crun_path, "run", "-b", mount_dir_path, temp_dir_path[13..] }, allocator);
-    _ = try crunProcess.spawnAndWait();
+    try std.posix.chdir(mount_dir_path);
+
+    container = c.libcrun_container_load_from_file("config.json", err);
+    if (container == NULL) {
+        // TODO: deal with errors
+    }
+
+    const crun_context = c.libcrun_context_t;
+
+    c.libcrun_container_run(crun_context, container, 0, err);
 
     var umountOverlayProcess = std.ChildProcess.init(&[_][]const u8{ "umount", mount_dir_path }, allocator);
     _ = try umountOverlayProcess.spawnAndWait();
