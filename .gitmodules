@@ -4,3 +4,6 @@
 [submodule "skopeo"]
 	path = skopeo
 	url = https://github.com/containers/skopeo.git
+[submodule "crun"]
+	path = crun
+	url = https://github.com/containers/crun.git
