@@ -203,15 +203,21 @@ pub fn main() !void {
 
     try std.posix.chdir(mount_dir_path);
 
-    const err = c.libcrun_error_t {};
-    const container = try c.libcrun_container_load_from_file("config.json", err);
-    //if (container == NULL) {
+    //const err = c.libcrun_error_t {};
+    var err: c.libcrun_error_t = null;
+    const container = c.libcrun_container_load_from_file("config.json", &err);
+    if (container == null) {
         // TODO: deal with errors
-    //}
+        @panic("unimplemented");
+    }
 
-    const crun_context = c.libcrun_context_t;
+    var crun_context = c.libcrun_context_t {};
 
-    c.libcrun_container_run(crun_context, container, 0, err);
+    const ret = c.libcrun_container_run(&crun_context, container, 0, &err);
+    switch (ret) {
+        // TODO: deal with different return values
+        else => @panic("unimplemented"),
+    }
 
     var umountOverlayProcess = std.ChildProcess.init(&[_][]const u8{ "umount", mount_dir_path }, allocator);
     _ = try umountOverlayProcess.spawnAndWait();
