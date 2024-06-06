@@ -205,11 +205,18 @@ pub fn main() !void {
 
     var err: c.libcrun_error_t = null;
     const container = c.libcrun_container_load_from_file("config.json", &err);
+    defer c.libcrun_container_free(container);
+
     if (container == null) {
         std.debug.panic("failed to load config: {s}\n", .{ err.*.msg });
     }
 
-    var crun_context = c.libcrun_context_t {};
+    var crun_context = c.libcrun_context_t {
+        .bundle = mount_dir_path,
+        .id = temp_dir_path[13..],
+        .state_root = null,
+
+    };
 
     const ret = c.libcrun_container_run(&crun_context, container, 0, &err);
 

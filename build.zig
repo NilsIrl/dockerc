@@ -22,20 +22,43 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+
+    const crun_autogen = b.addSystemCommand(&[_][]const u8{
+        "./autogen.sh",
+    });
+    crun_autogen.setCwd(b.path("crun"));
+
+    const crun_configure = b.addSystemCommand(&[_][]const u8{
+        "./configure",
+        "--enable-embedded-yajl",
+        "--disable-systemd",
+        "--disable-caps",
+        "--disable-seccomp",
+    });
+    crun_configure.setCwd(b.path("crun"));
+    crun_configure.step.dependOn(&crun_autogen.step);
+
+    const crun_make = b.addSystemCommand(&[_][]const u8{
+        "make",
+        "-j",
+    });
+    crun_make.setCwd(b.path("crun"));
+    crun_make.step.dependOn(&crun_configure.step);
+
     const runtime = b.addExecutable(.{
         .name = "runtime",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
         .link_libc = true,
-        // necessary to link in bigger file
-        // .code_model = .medium,
     });
 
     runtime.addIncludePath(b.path("crun"));
     runtime.addIncludePath(b.path("crun/src"));
     runtime.addIncludePath(b.path("crun/libocispec/src"));
     runtime.addObjectFile(b.path("crun/.libs/libcrun.a"));
+ 
+    runtime.step.dependOn(&crun_make.step);
 
     const go_cpu_arch = switch (target.query.cpu_arch orelse target.result.cpu.arch) {
         .x86_64 => "amd64",
