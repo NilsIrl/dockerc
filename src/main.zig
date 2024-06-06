@@ -203,10 +203,11 @@ pub fn main() !void {
 
     try std.posix.chdir(mount_dir_path);
 
-    container = c.libcrun_container_load_from_file("config.json", err);
-    if (container == NULL) {
+    const err = c.libcrun_error_t {};
+    const container = try c.libcrun_container_load_from_file("config.json", err);
+    //if (container == NULL) {
         // TODO: deal with errors
-    }
+    //}
 
     const crun_context = c.libcrun_context_t;
 

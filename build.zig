@@ -32,6 +32,10 @@ pub fn build(b: *std.Build) void {
         // .code_model = .medium,
     });
 
+    runtime.addIncludePath(.{ .cwd_relative = "/home/nils/git/crun" });
+    runtime.addIncludePath(.{ .cwd_relative = "/home/nils/git/crun/src" });
+    runtime.addIncludePath(.{ .cwd_relative = "/home/nils/git/crun/libocispec/src" });
+
     const go_cpu_arch = switch (target.query.cpu_arch orelse target.result.cpu.arch) {
         .x86_64 => "amd64",
         .aarch64 => "arm64",
