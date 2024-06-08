@@ -22,29 +22,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
-
-    const crun_autogen = b.addSystemCommand(&[_][]const u8{
-        "./autogen.sh",
-    });
-    crun_autogen.setCwd(b.path("crun"));
-
-    const crun_configure = b.addSystemCommand(&[_][]const u8{
-        "./configure",
-        "--enable-embedded-yajl",
-        "--disable-systemd",
-        "--disable-caps",
-        "--disable-seccomp",
-    });
-    crun_configure.setCwd(b.path("crun"));
-    crun_configure.step.dependOn(&crun_autogen.step);
-
-    const crun_make = b.addSystemCommand(&[_][]const u8{
-        "make",
-        "-j",
-    });
-    crun_make.setCwd(b.path("crun"));
-    crun_make.step.dependOn(&crun_configure.step);
-
     const runtime = b.addExecutable(.{
         .name = "runtime",
         .root_source_file = .{ .path = "src/main.zig" },
@@ -57,8 +34,33 @@ pub fn build(b: *std.Build) void {
     runtime.addIncludePath(b.path("crun/src"));
     runtime.addIncludePath(b.path("crun/libocispec/src"));
     runtime.addObjectFile(b.path("crun/.libs/libcrun.a"));
- 
-    runtime.step.dependOn(&crun_make.step);
+
+    const skip_crun_build = b.option(bool, "skip_crun_build", "Skip crun build") orelse false;
+
+    if (!skip_crun_build) {
+        const crun_autogen = b.addSystemCommand(&[_][]const u8{
+            "./autogen.sh",
+        });
+        crun_autogen.setCwd(b.path("crun"));
+
+        const crun_configure = b.addSystemCommand(&[_][]const u8{
+            "./configure",
+            "--enable-embedded-yajl",
+            "--disable-systemd",
+            "--disable-caps",
+            "--disable-seccomp",
+        });
+        crun_configure.setCwd(b.path("crun"));
+        crun_configure.step.dependOn(&crun_autogen.step);
+
+        const crun_make = b.addSystemCommand(&[_][]const u8{
+            "make",
+            "-j",
+        });
+        crun_make.setCwd(b.path("crun"));
+        crun_make.step.dependOn(&crun_configure.step);
+        runtime.step.dependOn(&crun_make.step);
+    }
 
     const go_cpu_arch = switch (target.query.cpu_arch orelse target.result.cpu.arch) {
         .x86_64 => "amd64",
@@ -96,7 +98,7 @@ pub fn build(b: *std.Build) void {
     skopeo.setCwd(b.path("skopeo"));
     const skopeo_output = skopeo.addOutputFileArg("skopeo");
     skopeo.addArg("./cmd/skopeo");
-    
+
     skopeo.setEnvironmentVariable(
         "CGO_ENABLED",
         "0",

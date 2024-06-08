@@ -10,6 +10,7 @@ const overlayfs_content = @embedFile("tools/fuse-overlayfs");
 
 const c = @cImport({
     @cInclude("libcrun/container.h");
+    @cInclude("libcrun/custom-handler.h");
 });
 
 fn getOffset(path: []const u8) !u64 {
@@ -39,7 +40,7 @@ fn getEnvFull(key: []const u8) ?[:0]const u8 {
     return null;
 }
 
-fn processArgs(file: std.fs.File, parentAllocator: std.mem.Allocator) !void {
+fn getContainerFromArgs(file: std.fs.File, rootfs_absolute_path: []const u8, parentAllocator: std.mem.Allocator) ![*c]c.libcrun_container_t {
     var arena = std.heap.ArenaAllocator.init(parentAllocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -94,6 +95,14 @@ fn processArgs(file: std.fs.File, parentAllocator: std.mem.Allocator) !void {
                 mounts_json = &array;
                 try object.put("mounts", std.json.Value{ .array = array });
             }
+
+            const rootVal = object.getPtr("root") orelse @panic("no root key");
+            switch (rootVal.*) {
+                .object => |*root| {
+                    try root.put("path", std.json.Value{ .string = rootfs_absolute_path });
+                },
+                else => return error.InvalidJSON,
+            }
         },
         else => return error.InvalidJSON,
     }
@@ -115,8 +124,8 @@ fn processArgs(file: std.fs.File, parentAllocator: std.mem.Allocator) !void {
             var mount = std.json.ObjectMap.init(allocator);
 
             var options = std.json.Array.init(allocator);
-            try options.append(std.json.Value { .string = "rw" });
-            try options.append(std.json.Value { .string = "rbind" });
+            try options.append(std.json.Value{ .string = "rw" });
+            try options.append(std.json.Value{ .string = "rbind" });
             try mount.put("options", std.json.Value{ .array = options });
 
             const separator = std.mem.indexOfScalar(u8, volume_syntax, ':') orelse @panic("no volume destination specified");
@@ -124,9 +133,9 @@ fn processArgs(file: std.fs.File, parentAllocator: std.mem.Allocator) !void {
             if (volume_syntax[0] == '/') {
                 try mount.put("source", std.json.Value{ .string = volume_syntax[0..separator] });
             } else {
-                try mount.put("source", std.json.Value{ .string = try std.fs.cwd().realpathAlloc(allocator, volume_syntax[0..separator])} );
+                try mount.put("source", std.json.Value{ .string = try std.fs.cwd().realpathAlloc(allocator, volume_syntax[0..separator]) });
             }
-            try mount.put("destination", std.json.Value{ .string = volume_syntax[separator + 1..] });
+            try mount.put("destination", std.json.Value{ .string = volume_syntax[separator + 1 ..] });
 
             try mounts_json.append(std.json.Value{ .object = mount });
         } else if (eql(u8, arg, "--")) {
@@ -138,18 +147,27 @@ fn processArgs(file: std.fs.File, parentAllocator: std.mem.Allocator) !void {
         }
     }
 
-    try file.setEndPos(0);
-    try file.seekTo(0);
-    var jsonWriter = std.json.writeStream(file.writer(), .{ .whitespace = .indent_tab });
+    const stringified_config = stringified_config: {
+        var list = std.ArrayList(u8).init(allocator);
+        errdefer list.deinit();
+        try std.json.stringifyArbitraryDepth(allocator, root_value, .{}, list.writer());
+        break :stringified_config try list.toOwnedSliceSentinel(0);
+    };
 
-    try std.json.Value.jsonStringify(root_value, &jsonWriter);
+    var err: c.libcrun_error_t = null;
+    const container = c.libcrun_container_load_from_memory(stringified_config, &err);
+    if (container == null) {
+        std.debug.panic("failed to load config: {s}\n", .{err.*.msg});
+    }
+
+    return container;
 }
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    // defer _ = gpa.deinit();
+
     var args = std.process.args();
     const executable_path = args.next() orelse unreachable;
 
@@ -166,7 +184,7 @@ pub fn main() !void {
 
     try std.fs.makeDirAbsolute(filesystem_bundle_dir_null);
 
-    const mount_dir_path = try std.fmt.allocPrint(allocator, "{s}/mount", .{temp_dir_path});
+    const mount_dir_path = try std.fmt.allocPrintZ(allocator, "{s}/mount", .{temp_dir_path});
     defer allocator.free(mount_dir_path);
 
     const offsetArg = try std.fmt.allocPrint(allocator, "offset={}", .{try getOffset(executable_path)});
@@ -184,7 +202,7 @@ pub fn main() !void {
     });
     defer allocator.free(overlayfs_options);
 
-    {
+    const container = container: {
         // Indent so that handles to files in mounted dir are closed by the end
         // to avoid umounting from being blocked.
         var tmpDir = try std.fs.openDirAbsolute(temp_dir_path, .{});
@@ -196,27 +214,34 @@ pub fn main() !void {
         var overlayfsProcess = std.ChildProcess.init(&[_][]const u8{ overlayfs_path, "-o", overlayfs_options, mount_dir_path }, allocator);
         _ = try overlayfsProcess.spawnAndWait();
 
-        const file = try tmpDir.openFile("mount/config.json", .{ .mode = .read_write });
+        const rootfs_absolute_path = try std.fmt.allocPrint(allocator, "{s}/mount/rootfs", .{temp_dir_path});
+        defer allocator.free(rootfs_absolute_path);
+
+        const file = try tmpDir.openFile("mount/config.json", .{ .mode = .read_only });
         defer file.close();
-        try processArgs(file, allocator);
-    }
 
-    try std.posix.chdir(mount_dir_path);
-
-    var err: c.libcrun_error_t = null;
-    const container = c.libcrun_container_load_from_file("config.json", &err);
+        break :container try getContainerFromArgs(file, rootfs_absolute_path, allocator);
+    };
     defer c.libcrun_container_free(container);
 
-    if (container == null) {
-        std.debug.panic("failed to load config: {s}\n", .{ err.*.msg });
-    }
-
-    var crun_context = c.libcrun_context_t {
+    var crun_context = c.libcrun_context_t{
+        //.bundle = @ptrCast(mount_dir_path),
         .bundle = mount_dir_path,
         .id = temp_dir_path[13..],
-        .state_root = null,
-
+        .fifo_exec_wait_fd = -1,
+        .preserve_fds = 0,
+        .listen_fds = 0,
     };
+
+    var err: c.libcrun_error_t = null;
+    if (c.libcrun_init_logging(&crun_context.output_handler, &crun_context.output_handler_arg, crun_context.id, null, &err) < 0) {
+        std.debug.panic("unreachable but not using the unreachable keyword for forward compatibility", .{});
+    }
+
+    crun_context.handler_manager = c.libcrun_handler_manager_create(&err);
+    if (crun_context.handler_manager == null) {
+        std.debug.panic("failed to create handler manager ({d}): {s}\n", .{ err.*.status, err.*.msg });
+    }
 
     const ret = c.libcrun_container_run(&crun_context, container, 0, &err);
 
@@ -224,7 +249,7 @@ pub fn main() !void {
         if (err != null) {
             std.debug.panic("failed to run container ({d}): {s}\n", .{ ret, err.*.msg });
         } else {
-            std.debug.panic("failed to run container ({d})\n", .{ ret });
+            std.debug.panic("failed to run container ({d})\n", .{ret});
         }
     }
 
