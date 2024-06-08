@@ -225,7 +225,6 @@ pub fn main() !void {
     defer c.libcrun_container_free(container);
 
     var crun_context = c.libcrun_context_t{
-        //.bundle = @ptrCast(mount_dir_path),
         .bundle = mount_dir_path,
         .id = temp_dir_path[13..],
         .fifo_exec_wait_fd = -1,
