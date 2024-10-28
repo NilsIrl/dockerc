@@ -28,6 +28,15 @@ Skopeo is used for loading images, for other locations refer to [its documentati
 
 ## Build from source
 
+Please note that this project uses Git submodules. If you clone this repository, you may need to run the following commands to initialize and update the submodules:
+
+```
+$ git submodule init
+$ git submodule update
+```
+
+This will ensure that you download and update all relevant submodule contents. Once the submodules are properly initialized, you can proceed with the compilation instructions below.
+
 ```
 $ zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-linux-musl
 $ zig build -Doptimize=ReleaseSafe -Dtarget=aarch64-linux-musl
